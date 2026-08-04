@@ -1,4 +1,4 @@
-const API_URL = "여기에 Apps Script URL 입력";
+const API_URL = "https://script.google.com/macros/s/AKfycbyp0m2jku5l0MyGgCk0-ikDskG29puw_zO2C0uM7dcHL_aWMbCkNHMClSrTr0SoXk9gsw/exec";
 
 
 export async function getReservations() {
