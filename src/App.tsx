@@ -1,3 +1,4 @@
+import { createReservation, getReservations } from './utils/googleSheetApi';
 import React, { useState, useEffect } from 'react';
 import {
   CenterId,
@@ -113,53 +114,60 @@ export default function App() {
   const pendingReservations = reservations.filter((r) => r.status === '승인대기');
 
   // Submit New Reservation
-  const handleSubmitNewReservation = (data: {
-    purpose: string;
-    applicantName: string;
-    applicantCompany: string;
-    applicantPhone: string;
-    pincode: string;
-    startTime: string;
-    endTime: string;
-  }) => {
-    if (!bookingSlotData) return;
+const handleSubmitNewReservation = async (data: {
+  purpose: string;
+  applicantName: string;
+  applicantCompany: string;
+  applicantPhone: string;
+  pincode: string;
+  startTime: string;
+  endTime: string;
+}) => {
+  if (!bookingSlotData) return;
 
-    const newRes: Reservation = {
-      id: `res-${Date.now()}`,
-      centerId: selectedCenterId,
-      roomId: bookingSlotData.room.id,
-      date: selectedDate,
-      startTime: data.startTime,
-      endTime: data.endTime,
-      purpose: data.purpose,
-      applicantName: data.applicantName,
-      applicantCompany: data.applicantCompany,
-      applicantPhone: data.applicantPhone,
-      pincode: data.pincode,
-      status: '승인대기',
-      requestedAt: new Date().toISOString(),
-      notificationSent: false,
-    };
-
-    setReservations((prev) => [newRes, ...prev]);
-
-    // Log reception notification
-    const notifLog = logNotification(
-      newRes,
-      currentCenter,
-      bookingSlotData.room,
-      'REQUESTED'
-    );
-    setNotificationLogs((prev) => [notifLog, ...prev]);
-
-    setBookingSlotData(null);
-
-    setToastMessage({
-      title: '예약 신청 접수 완료 (승인대기)',
-      description: `${bookingSlotData.room.name} (${data.startTime}~${data.endTime}) 신청이 접수되었습니다. 담당자 승인 시 알림톡이 발송됩니다.`,
-      type: 'info',
-    });
+  const newRes: Reservation = {
+    id: `res-${Date.now()}`,
+    centerId: selectedCenterId,
+    roomId: bookingSlotData.room.id,
+    date: selectedDate,
+    startTime: data.startTime,
+    endTime: data.endTime,
+    purpose: data.purpose,
+    applicantName: data.applicantName,
+    applicantCompany: data.applicantCompany,
+    applicantPhone: data.applicantPhone,
+    pincode: data.pincode,
+    status: '승인대기',
+    requestedAt: new Date().toISOString(),
+    notificationSent: false,
   };
+
+  // 화면엔 먼저 반영 (체감 속도)
+  setReservations((prev) => [newRes, ...prev]);
+
+  // 실제 구글 시트에 저장
+  try {
+    await createReservation(newRes);
+  } catch (err) {
+    console.error('구글 시트 저장 실패:', err);
+    setToastMessage({
+      title: '⚠️ 구글 시트 저장 실패',
+      description: '예약은 화면에 표시되었지만 서버 저장에 실패했습니다. 관리자에게 문의하세요.',
+      type: 'warning',
+    });
+    return;
+  }
+
+  const notifLog = logNotification(newRes, currentCenter, bookingSlotData.room, 'REQUESTED');
+  setNotificationLogs((prev) => [notifLog, ...prev]);
+  setBookingSlotData(null);
+
+  setToastMessage({
+    title: '예약 신청 접수 완료 (승인대기)',
+    description: `${bookingSlotData.room.name} (${data.startTime}~${data.endTime}) 신청이 접수되었습니다.`,
+    type: 'info',
+  });
+};
 
   // Approve Reservation Action
   const handleApproveReservation = (reservationId: string) => {
