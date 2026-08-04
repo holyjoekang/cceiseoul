@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbxKyiN5TAI8l59yqGLoZfVTdQZ8Ty_lCdII9U6MlGGDZJbrH1zNqahYWMn3M3WzkdMHUQ/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycby8B12YA1O4OE0KaaBqnbKzOO0iDcqG90ik2PTJyO4_N261i0GMxuxhfl609ERmNiNNYw/exec";
 
 
 export async function createReservation(reservation: any) {
