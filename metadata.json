@@ -1,0 +1,6 @@
+{
+  "name": "창조경제혁신센터 회의실 예약 시스템",
+  "description": "센터별 회의실 대시보드 타임라인 예약, 관리자 승인 워크플로우 및 알림톡 연동 시스템",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
