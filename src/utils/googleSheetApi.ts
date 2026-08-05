@@ -16,3 +16,20 @@ export async function createReservation(reservation: any) {
   });
   return await response.json();
 }
+
+export async function updateReservationStatus(
+  reservationId: string,
+  status: string,
+  rejectionReason?: string
+) {
+  const response = await fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action: "updateStatus",
+      reservationId,
+      status,
+      rejectionReason: rejectionReason || "",
+    }),
+  });
+  return await response.json();
+}
