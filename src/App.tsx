@@ -1,4 +1,3 @@
-import { createReservation, getReservations } from './utils/googleSheetApi';
 import React, { useState, useEffect } from 'react';
 import {
   CenterId,
@@ -20,6 +19,7 @@ import {
   loadGoogleSheetsConfig,
   saveGoogleSheetsConfig,
 } from './utils/storage';
+import { createReservation, updateReservationStatus } from './utils/googleSheetApi';
 import { logNotification } from './utils/notification';
 import { getKoreanFormattedDate } from './utils/timeUtils';
 import { Header } from './components/Header';
@@ -114,63 +114,63 @@ export default function App() {
   const pendingReservations = reservations.filter((r) => r.status === '승인대기');
 
   // Submit New Reservation
-const handleSubmitNewReservation = async (data: {
-  purpose: string;
-  applicantName: string;
-  applicantCompany: string;
-  applicantPhone: string;
-  pincode: string;
-  startTime: string;
-  endTime: string;
-}) => {
-  if (!bookingSlotData) return;
+  const handleSubmitNewReservation = async (data: {
+    purpose: string;
+    applicantName: string;
+    applicantCompany: string;
+    applicantPhone: string;
+    pincode: string;
+    startTime: string;
+    endTime: string;
+  }) => {
+    if (!bookingSlotData) return;
 
-  const newRes: Reservation = {
-    id: `res-${Date.now()}`,
-    centerId: selectedCenterId,
-    roomId: bookingSlotData.room.id,
-    date: selectedDate,
-    startTime: data.startTime,
-    endTime: data.endTime,
-    purpose: data.purpose,
-    applicantName: data.applicantName,
-    applicantCompany: data.applicantCompany,
-    applicantPhone: data.applicantPhone,
-    pincode: data.pincode,
-    status: '승인대기',
-    requestedAt: new Date().toISOString(),
-    notificationSent: false,
+    const newRes: Reservation = {
+      id: `res-${Date.now()}`,
+      centerId: selectedCenterId,
+      roomId: bookingSlotData.room.id,
+      date: selectedDate,
+      startTime: data.startTime,
+      endTime: data.endTime,
+      purpose: data.purpose,
+      applicantName: data.applicantName,
+      applicantCompany: data.applicantCompany,
+      applicantPhone: data.applicantPhone,
+      pincode: data.pincode,
+      status: '승인대기',
+      requestedAt: new Date().toISOString(),
+      notificationSent: false,
+    };
+
+    // 화면엔 먼저 반영 (체감 속도)
+    setReservations((prev) => [newRes, ...prev]);
+
+    // 실제 구글 시트에 저장
+    try {
+      await createReservation(newRes);
+    } catch (err) {
+      console.error('구글 시트 저장 실패:', err);
+      setToastMessage({
+        title: '⚠️ 구글 시트 저장 실패',
+        description: '예약은 화면에 표시되었지만 서버 저장에 실패했습니다. 관리자에게 문의하세요.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const notifLog = logNotification(newRes, currentCenter, bookingSlotData.room, 'REQUESTED');
+    setNotificationLogs((prev) => [notifLog, ...prev]);
+    setBookingSlotData(null);
+
+    setToastMessage({
+      title: '예약 신청 접수 완료 (승인대기)',
+      description: `${bookingSlotData.room.name} (${data.startTime}~${data.endTime}) 신청이 접수되었습니다. 담당자 승인 시 알림톡이 발송됩니다.`,
+      type: 'info',
+    });
   };
 
-  // 화면엔 먼저 반영 (체감 속도)
-  setReservations((prev) => [newRes, ...prev]);
-
-  // 실제 구글 시트에 저장
-  try {
-    await createReservation(newRes);
-  } catch (err) {
-    console.error('구글 시트 저장 실패:', err);
-    setToastMessage({
-      title: '⚠️ 구글 시트 저장 실패',
-      description: '예약은 화면에 표시되었지만 서버 저장에 실패했습니다. 관리자에게 문의하세요.',
-      type: 'warning',
-    });
-    return;
-  }
-
-  const notifLog = logNotification(newRes, currentCenter, bookingSlotData.room, 'REQUESTED');
-  setNotificationLogs((prev) => [notifLog, ...prev]);
-  setBookingSlotData(null);
-
-  setToastMessage({
-    title: '예약 신청 접수 완료 (승인대기)',
-    description: `${bookingSlotData.room.name} (${data.startTime}~${data.endTime}) 신청이 접수되었습니다.`,
-    type: 'info',
-  });
-};
-
   // Approve Reservation Action
-  const handleApproveReservation = (reservationId: string) => {
+  const handleApproveReservation = async (reservationId: string) => {
     const resToApprove = reservations.find((r) => r.id === reservationId);
     if (!resToApprove) return;
 
@@ -190,6 +190,18 @@ const handleSubmitNewReservation = async (data: {
 
     setReservations(updated);
 
+    try {
+      await updateReservationStatus(reservationId, '승인완료');
+    } catch (err) {
+      console.error('구글 시트 상태 업데이트 실패:', err);
+      setToastMessage({
+        title: '⚠️ 구글 시트 업데이트 실패',
+        description: '화면에는 승인 처리되었지만 서버 반영에 실패했습니다.',
+        type: 'warning',
+      });
+      return;
+    }
+
     if (room && center) {
       const notifLog = logNotification(
         { ...resToApprove, status: '승인완료' },
@@ -208,7 +220,7 @@ const handleSubmitNewReservation = async (data: {
   };
 
   // Reject Reservation Action
-  const handleRejectReservation = (reservationId: string, reason: string) => {
+  const handleRejectReservation = async (reservationId: string, reason: string) => {
     const resToReject = reservations.find((r) => r.id === reservationId);
     if (!resToReject) return;
 
@@ -228,6 +240,18 @@ const handleSubmitNewReservation = async (data: {
 
     setReservations(updated);
 
+    try {
+      await updateReservationStatus(reservationId, '반려', reason);
+    } catch (err) {
+      console.error('구글 시트 상태 업데이트 실패:', err);
+      setToastMessage({
+        title: '⚠️ 구글 시트 업데이트 실패',
+        description: '화면에는 반려 처리되었지만 서버 반영에 실패했습니다.',
+        type: 'warning',
+      });
+      return;
+    }
+
     if (room && center) {
       const notifLog = logNotification(
         { ...resToReject, status: '반려', rejectionReason: reason },
@@ -246,7 +270,7 @@ const handleSubmitNewReservation = async (data: {
   };
 
   // Approve All Pending
-  const handleApproveAllPending = () => {
+  const handleApproveAllPending = async () => {
     const pendingIds = pendingReservations.map((r) => r.id);
     if (pendingIds.length === 0) return;
 
@@ -264,6 +288,20 @@ const handleSubmitNewReservation = async (data: {
 
     setReservations(updated);
 
+    try {
+      await Promise.all(
+        pendingIds.map((id) => updateReservationStatus(id, '승인완료'))
+      );
+    } catch (err) {
+      console.error('구글 시트 일괄 업데이트 실패:', err);
+      setToastMessage({
+        title: '⚠️ 구글 시트 일괄 업데이트 실패',
+        description: '화면에는 승인 처리되었지만 일부 서버 반영에 실패했을 수 있습니다.',
+        type: 'warning',
+      });
+      return;
+    }
+
     setToastMessage({
       title: '대기 건 일괄 승인 완료',
       description: `총 ${pendingIds.length}건의 예약 신청이 일괄 승인되었으며 알림톡이 전송되었습니다.`,
@@ -272,10 +310,22 @@ const handleSubmitNewReservation = async (data: {
   };
 
   // Cancel Reservation Action
-  const handleCancelReservation = (reservationId: string) => {
+  const handleCancelReservation = async (reservationId: string) => {
     setReservations((prev) =>
       prev.map((r) => (r.id === reservationId ? { ...r, status: '취소' } : r))
     );
+
+    try {
+      await updateReservationStatus(reservationId, '취소');
+    } catch (err) {
+      console.error('구글 시트 상태 업데이트 실패:', err);
+      setToastMessage({
+        title: '⚠️ 구글 시트 업데이트 실패',
+        description: '화면에는 취소 처리되었지만 서버 반영에 실패했습니다.',
+        type: 'warning',
+      });
+      return;
+    }
 
     setToastMessage({
       title: '예약 취소 완료',
@@ -285,10 +335,16 @@ const handleSubmitNewReservation = async (data: {
   };
 
   // Status Change from Admin Table
-  const handleUpdateStatus = (reservationId: string, status: ReservationStatus) => {
+  const handleUpdateStatus = async (reservationId: string, status: ReservationStatus) => {
     setReservations((prev) =>
       prev.map((r) => (r.id === reservationId ? { ...r, status } : r))
     );
+
+    try {
+      await updateReservationStatus(reservationId, status);
+    } catch (err) {
+      console.error('구글 시트 상태 업데이트 실패:', err);
+    }
   };
 
   // Delete Reservation
